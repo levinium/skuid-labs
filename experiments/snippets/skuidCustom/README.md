@@ -1,7 +1,7 @@
 # skuidCustom.js
 This is a custom library allowing for function calls to the skuid.custom (eg. skuid.custom.modelLoader(model,params)). This library can be embedded as an In-line in the SKUID Editor, or as a Static Resource from Salesforce. Also adds functions helpful to working with Dates and Objects.
 
-This library has been tested and is working with SKUID 12.1.7 and API v1.
+This library has been tested and is working with SKUID 15.3.7 and API v1.
 
 ## skuidCustom.js Functions
 
