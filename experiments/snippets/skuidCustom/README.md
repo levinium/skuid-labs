@@ -92,11 +92,14 @@ HTML escapes a string. For use when creating XML to define template contents whe
 Try to re-render a component, catches the error if the component cannot be re-rendered at this time.
 
 ### skuid.custom.waitForElement(fparams,callback)
-* fparams = {
-	* initEle: function to initialize the element / check if the element is initialized, should return the element. Takes context as a variable.
-	* context:passed context or defaults to window
-	* chunkTime: time between chunks, defaults to 250
- }
+* fparams =
+```
+{
+	initEle: function to initialize the element / check if the element is initialized, should return the element. Takes context as a variable.
+	context:passed context or defaults to window
+	chunkTime: time between chunks, defaults to 250
+}
+```
  * callback: function to run when the element is determined to be ready
 
 Wait for an element to be ready on the screen before performing the callback function. Useful if needing to make a rendering update to an item on the screen but the item may not yet be fully rendered on the screen. This function will keep trying until the item is ready and then will call the callback function.
@@ -219,18 +222,21 @@ function(){
 
 ### skuid.custom.modelLoader(model[],fparams)
 * model: model or array of models to load
-* fparams = {
-    * limit: Number of rows to limit by. If unspecified will choose the model's recordsLimit property	or if that is unspecified defaults to 200
-    * progressCallback: function to call before running each individual query in the format progressCallback(fparams), fparams is an object
+* fparams =
+```
+{
+    limit: Number of rows to limit by. If unspecified will choose the model's recordsLimit property	or if that is unspecified defaults to 200
+    progressCallback: function to call before running each individual query in the format progressCallback(fparams), fparams is an object
         progressCallback fparams = {
-            * count: count of rows queried so far
-            * limit: our limit for how many rows to query per query run
-            * nextStart: the row # of the next row to be queried,
-            * nextEnd: the last row # to be queried (based on limit)
+            count: count of rows queried so far
+            limit: our limit for how many rows to query per query run
+            nextStart: the row # of the next row to be queried,
+            nextEnd: the last row # to be queried (based on limit)
         }
-    * exportWhenDone: true or false for whether or not to export when done loading, default false
-    * exportOptions: options object to pass to the export function for customized options
+    exportWhenDone: true or false for whether or not to export when done loading, default false
+    exportOptions: options object to pass to the export function for customized options
 }
+```
 
 Clear and Load all records in a model (or array of models) in chunks limited by the model's limit propery, a passed limit, or otherwise if both are undefined defaults to 200.
 
@@ -279,26 +285,31 @@ $.when(skuid.custom.modelLoader(skuid.$M('OurModel'),{progressCallback: callback
 
 ### skuid.custom.modelSaver(model[],fparams)
 * model: model or array of models to save
-* fparams = {
-    * limit: Number of rows to limit by. If unspecified will choose the model's recordsLimit property or if that is unspecified defaults to 100
-    * progressCallback: function to call before running each individual query in the format progressCallback(fparams), fparams is an object
+* fparams =
+```
+{
+    limit: Number of rows to limit by. If unspecified will choose the model's recordsLimit property or if that is unspecified defaults to 100
+    progressCallback: function to call before running each individual query in the format progressCallback(fparams), fparams is an object
         progressCallback fparams = {
-            * count: count of rows queried so far
-            * limit: our limit for how many rows to query per query run
-            * nextStart: the row # of the next row to be queried,
-            * nextEnd: the last row # to be queried (based on limit)
-	    * model: the model currently being saved
+            count: count of rows queried so far
+            limit: our limit for how many rows to query per query run
+            nextStart: the row # of the next row to be queried,
+            nextEnd: the last row # to be queried (based on limit)
+	    model: the model currently being saved
         }
 }
+```
 
 Saves a model (or array of models) incrementally as to not overload the save process with too many saves at once
 
 ### skuid.custom.sheetJSFromTable(c, options)
 * c: table's component or component's ID
-* options: 
+* options:
+```
 {
-  * showHidden: true //defaults to true
+  showHidden: true //defaults to true
 }
+```
 
 Takes a table component or a table component's ID and returns array of arrays to use for the XLSX.utils.aoa_to_sheet function in the SheetJS library. This is for exporting a table to an Excel file using SheetJS.
 
@@ -325,12 +336,12 @@ Takes model.data and options object and returns an array of arrays to use for th
 * options: 
 ```
 {
-table: table component to update (optional, use either this or tableId)
-tableId: id of table component to update (optional, use either this or table)
-key: the key to use to match table column, can either use the column's label, or fieldId
-by: "label" or "fieldId" depending on how you want to select the column; defaults to "label"
-value: true to hide, false to unhide; defaults to true
-wrapper: optional wrapper to re-render in order to refresh the display so the changes are visible - NOTE: if making more than 1 change at a time do not use this as it will force several re-renders and can slow/freeze the UI
+	table: table component to update (optional, use either this or tableId)
+	tableId: id of table component to update (optional, use either this or table)
+	key: the key to use to match table column, can either use the column's label, or fieldId
+	by: "label" or "fieldId" depending on how you want to select the column; defaults to "label"
+	value: true to hide, false to unhide; defaults to true
+	wrapper: optional wrapper to re-render in order to refresh the display so the changes are visible - NOTE: if making more than 1 change at a time do not use this as it will force several re-renders and can slow/freeze the UI
 }
 ```
 
