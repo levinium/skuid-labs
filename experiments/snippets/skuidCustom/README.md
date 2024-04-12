@@ -296,9 +296,9 @@ Saves a model (or array of models) incrementally as to not overload the save pro
 ### skuid.custom.sheetJSFromTable(c, options)
 * c: table's component or component's ID
 * options: 
-* {
-*	showHidden: true //defaults to true
-* }
+{
+  * showHidden: true //defaults to true
+}
 
 Takes a table component or a table component's ID and returns array of arrays to use for the XLSX.utils.aoa_to_sheet function in the SheetJS library. This is for exporting a table to an Excel file using SheetJS.
 
@@ -308,27 +308,25 @@ This currently does not work with template fields. As a workaround, create your 
 
 ### skuid.custom.sheetJSData(d, options)
 * d: model.data array
-* options:
-* {
-*		// fields to include in export
-*		fields: [
-*			{id: 'FIELDID', name: 'RENAMEFIELDCOLUMNHEADERTOTHIS'}
-*		]
-*		includeId: false //defaults to false
+* options: {
+*  	//fields to include in export
+* 	fields: [
+* 		{id: 'FIELDID', name: 'RENAMEFIELDCOLUMNHEADERTOTHIS'}
+* 	]
+* 	includeId: false //defaults to false
 * }
 
 Takes model.data and options object and returns an array of arrays to use for the XLSX.utils.aoa_to_sheet function in the SheetJS library. This is for exporting model data directly to an Excel file using SheetJS.
 
 ### skuid.custom.setHidden(f)
-* options:
-*{
-*	table: table component to update (optional, use either this or tableId)
-*	tableId: id of table component to update (optional, use either this or table)
-*	key: the key to use to match table column, can either use the column's label, or fieldId
-*	by: "label" or "fieldId" depending on how you want to select the column; defaults to "label"
-*	value: true to hide, false to unhide; defaults to true
-*	wrapper: optional wrapper to re-render in order to refresh the display so the changes are visible - NOTE: if making more than 1 change at a time do not use this as it will force several re-renders and can slow/freeze the UI
-*}
+* options: {
+* table: table component to update (optional, use either this or tableId)
+* tableId: id of table component to update (optional, use either this or table)
+* key: the key to use to match table column, can either use the column's label, or fieldId
+* by: "label" or "fieldId" depending on how you want to select the column; defaults to "label"
+* value: true to hide, false to unhide; defaults to true
+* wrapper: optional wrapper to re-render in order to refresh the display so the changes are visible - NOTE: if making more than 1 change at a time do not use this as it will force several re-renders and can slow/freeze the UI
+* }
 
 Takes an object consisting of table and properties and sets an item in the table to display or not display based on properties
 
