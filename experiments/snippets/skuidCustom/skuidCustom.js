@@ -8,7 +8,7 @@
 /* eslint-disable no-param-reassign */
 /* eslint-disable no-extend-native */
 /* eslint-disable no-undef */
-const $ = skuid.$;
+
 
 // Custom SKUID Functions
 skuid.custom = {};
@@ -25,12 +25,45 @@ skuid.custom.isBlank = function (v) {
 // rather than momentarily removing the block and replacing it with a new block
 // as the standard blockUI function would do
 skuid.custom.blockUI = function (obj) {
-	if ($('.blockUI.blockMsg.blockPage') !== undefined && $('.blockUI.blockMsg.blockPage')[0] !== undefined && obj !== undefined && obj.message !== undefined) {
-		$('.blockUI.blockMsg.blockPage')[0].textContent = obj.message;
+	if(obj.timeout !== undefined){
+		skuid.$.blockUI(obj);
+	}
+	else if (skuid.$('.blockUI.blockMsg.blockPage') !== undefined && skuid.$('.blockUI.blockMsg.blockPage')[0] !== undefined && obj !== undefined && obj.message !== undefined) {
+		skuid.$('.blockUI.blockMsg.blockPage')[0].textContent = obj.message;
 	} else {
-		$.blockUI(obj);
+		skuid.$.blockUI(obj);
 	}
 };
+
+Array.prototype.includesAny = function(arr){
+	if(Array.isArray(arr)){
+		for(let i=0;i<arr.length;i++){
+			if(this.includes(arr[i])){
+				return true;
+			}
+		}
+	}
+	else{
+		return this.includes(arr);
+	}
+
+	return false;
+}
+
+Array.prototype.includesAll = function(arr){
+	if(Array.isArray(arr)){
+		for(let i=0;i<arr.length;i++){
+			if(!this.includes(arr[i])){
+				return false;
+			}
+		}
+	}
+	else{
+		return this.includes(arr);
+	}
+
+	return true;
+}
 
 // Date.isLeapYear(year)
 // Checks if a year is a leap year, returns true or false
@@ -68,12 +101,73 @@ Date.prototype.addDays = function (days) {
 	return date;
 };
 
+skuid.custom.isValidSFDate = function (dateString) {
+	var regEx = /^\d{4}-\d{2}-\d{2}$/;
+	if (!dateString.match(regEx)) return false; // Invalid format
+	var d = new Date(dateString);
+	var dNum = d.getTime();
+	if (!dNum && dNum !== 0) return false; // NaN value, Invalid date
+	return d.toISOString().slice(0, 10) === dateString;
+  }
+
 // skuid.custom.fixCurrency(number)
 // remove anything past 2 digits after the decimal point for a number
 // necessary to do after doing any mathematical operations between 2 floating point numbers
 skuid.custom.fixCurrency = function (num) {
-	// return Math.floor(num*100)/100;
+	if(num === undefined || num === null){
+		return num;
+	}
+	if (typeof num === 'string') {
+        num = num.replaceAll(/[^.0-9]/gi, '');
+		num = parseFloat(num);
+		if (isNaN(num)) {
+            num = 0;
+        }
+    }
 	return parseFloat(num.toFixed(2));
+};
+
+// skuid.custom.fixCurrencyStr(string)
+// remove any invalid characters / formatting from what should be a currency string
+skuid.custom.fixCurrencyStr = function (str) {
+	if (typeof str !== 'string') {
+        return str;
+    }
+    const hasCommas = str.includes(',');
+    str = str.replaceAll(/[^.0-9]/gi, '');
+    const splitStr = str.split('.');
+    let strFront = splitStr[0];
+    if (hasCommas && strFront.length > 3) {
+        let strTemp = '';
+        let count = 0;
+        for (let i = strFront.length - 1; i >= 0; i--) {
+            let comma = '';
+            if (count !== 0 && count % 3 === 0) {
+                comma = ',';
+            }
+            strTemp = strFront[i] + comma + strTemp;
+            count++;
+        }
+        strFront = strTemp;
+    }
+    
+    if (splitStr.length > 1) {
+        str = strFront + '.' + splitStr[1].substring(0, 2);
+    } else {
+        str = strFront;
+    }
+    
+	return str;
+};
+
+// skuid.custom.formatPercentDone(number)
+// Takes a number from 0-100 and formats percent done for use in a picklist based progress indicator that goes in increments of 5 from 0-100
+skuid.custom.formatPercentDone = function (percentDone){
+	if(percentDone === undefined || percentDone === null || isNaN(percentDone) || percentDone < 0 || percentDone > 100){
+		return undefined;
+	}
+
+	return `${Math.round(percentDone/5)*5}`
 };
 
 // skuid.custom.operatorSOQL(operatorSafe)
@@ -205,7 +299,8 @@ skuid.custom.createUpdateExistingRow = function (model, row) {
 
 	const upd = row;
 	delete upd.Id;
-	if (upd !== {}) {
+	//if (upd !== {}) {
+	if (typeof upd === 'object' && upd !== null && Object.keys(upd).length !== 0) {
 		model.updateRow(model.data[model.data.length - 1], upd);
 	}
 
@@ -251,6 +346,81 @@ skuid.custom.createUpdateExistingRows = function (model, rows) {
 	return retRows;
 }
 
+Object.byString = function(o, s) {
+	if(o===null || o===undefined){
+		return o;
+	}
+    s = s.replace(/\[(\w+)\]/g, '.$1'); // convert indexes to properties
+    s = s.replace(/^\./, '');           // strip a leading dot
+    var a = s.split('.');
+    for (var i = 0, n = a.length; i < n; ++i) {
+        var k = a[i];
+        if (k in o) {
+            o = o[k];
+            if(o===null){
+            	return;
+            }
+        } else {
+            return;
+        }
+    }
+    return o;
+}
+
+// skuid.custom.iterateAsync(data, fn, chunkEndFn, maxTimePerChunk, context)
+//	Iterate an array or a map asynchronously
+//	If iterating over Model Rows,
+//	first get the rows into an array using model.getRows(), use that as the array variable
+//	fn = the function to call while iterating over the array (for loop function call)
+//	chunkEndFn (optional, use undefined if not using)
+//	= the function to call when the chunk ends, used to update a loading message
+//	last two args are optional
+/*
+//Usage
+$.when(skuid.custom.iterateAsync(data,
+	function(row, index, data) {
+		//runs each iteration of the loop
+
+	},
+	function(row, length, percentDone) {
+		//runs after every chunk completes, optional
+
+	}
+)).then(() => {
+	//Optional, runs after iterating
+
+});
+*/
+skuid.custom.iterateAsync = function(data,fn,chunkEndFn,maxTimePerChunk,context){
+	let defer = skuid.$.Deferred();
+
+	if(data === undefined || data === null || data === '' || (!Array.isArray(data) && ! data instanceof Map)){
+		defer.reject('Invalid Collection');
+		return defer.promise();
+	}
+
+	if(Array.isArray(data)){
+		skuid.custom.iterateArrayAsync(data,fn,chunkEndFn,
+		function(){
+			//runs after completing the loop, this is optional, use undefined if not using this
+			defer.resolve();
+		},maxTimePerChunk,context);
+	}
+	else if(data instanceof Map){
+		skuid.custom.iterateMapAsync(data,fn,chunkEndFn,
+		function(){
+			//runs after completing the loop, this is optional, use undefined if not using this
+			defer.resolve();
+		},maxTimePerChunk,context);
+	}
+	else{
+		defer.reject('Invalid Collection');
+		return defer.promise();
+	}
+
+	return defer.promise();
+}
+
 // skuid.custom.iterateArrayAsync(array, fn, chunkEndFn, endFn, maxTimePerChunk, context)
 //	Iterate an array asynchronously
 //	If iterating over Model Rows,
@@ -278,8 +448,16 @@ skuid.custom.iterateArrayAsync = function (array, fn, chunkEndFn, endFn, maxTime
 	maxTimePerChunk = maxTimePerChunk || 200;
 	let index = 0;
 
+	let defer = skuid.$.Deferred();
+
 	function now () {
 		return new Date().getTime();
+	}
+
+	function wait(t) {
+		return new Promise(function(resolve) { 
+			setTimeout(resolve, t);
+		});
 	}
 
 	function doChunk () {
@@ -295,12 +473,18 @@ skuid.custom.iterateArrayAsync = function (array, fn, chunkEndFn, endFn, maxTime
 		}
 		if (index < array.length) {
 			// set Timeout for async iteration
-			setTimeout(doChunk, 1);
-		} else if (endFn !== undefined) {
-			endFn.call(context);
+			//setTimeout(doChunk, 1);
+			wait(1).then(f=>{doChunk();});
+		} else {
+			if (endFn !== undefined) {
+				endFn.call(context);
+			}
+			defer.resolve();
 		}
-	}    
-	doChunk();    
+	}
+	doChunk();
+
+	return defer.promise();
 };
 
 // skuid.custom.iterateMapAsync(map, fn, chunkEndFn, endFn, maxTimePerChunk, context)
@@ -329,8 +513,16 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 	maxTimePerChunk = maxTimePerChunk || 200;
 	let index = 0;
 
+	let defer = skuid.$.Deferred();
+
 	function now () {
 		return new Date().getTime();
+	}
+
+	function wait(t) {
+		return new Promise(function(resolve) { 
+			setTimeout(resolve, t);
+		});
 	}
 
 	function doChunk () {
@@ -346,12 +538,83 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 		}
 		if (index < array.length) {
 			// set Timeout for async iteration
-			setTimeout(doChunk, 1);
-		} else if (endFn !== undefined) {
-			endFn.call(context);
+			//setTimeout(doChunk, 1);
+			wait(1).then(f=>{doChunk();});
+		} else {
+			if (endFn !== undefined) {
+				endFn.call(context);
+			}
+			defer.resolve();
 		}
-	}    
+	}
 	doChunk();
+
+	return defer.promise();
+};
+
+// skuid.custom.iterateMapAsync(map, fn, chunkEndFn, endFn, maxTimePerChunk, context)
+//	Iterate a map asynchronously
+//	fn = the function to call while iterating over the map (for loop function call)
+//	chunkEndFn (optional, use undefined if not using) = the function to call when the chunk ends,
+//	used to update a loading message
+//	endFn (optional, use undefined if not using) = called at the end of the async execution
+//	last two args are optional
+/*
+//Usage
+skuid.custom.iterateMapAsync(ourMap,function(value, key, map){
+	//runs each iteration of the loop
+},
+function(index,length,percentDone){
+	//runs after every chunk completes, this is optional, use undefined if not using this
+},
+function(){
+	//runs after completing the loop, this is optional, use undefined if not using this
+	
+});
+*/
+skuid.custom.iterateObjAsync = function (obj, fn, chunkEndFn, endFn, maxTimePerChunk, context) {
+	const array = Object.entries(obj);
+	context = context || window;
+	maxTimePerChunk = maxTimePerChunk || 200;
+	let index = 0;
+
+	let defer = skuid.$.Deferred();
+
+	function now () {
+		return new Date().getTime();
+	}
+
+	function wait(t) {
+		return new Promise(function(resolve) { 
+			setTimeout(resolve, t);
+		});
+	}
+
+	function doChunk () {
+		const startTime = now();
+		while (index < array.length && (now() - startTime) <= maxTimePerChunk) {
+			// callback called with args (value, key, obj)
+			fn.call(context, array[index][1], array[index][0], obj);
+			++index;
+		}
+		if ((now() - startTime) > maxTimePerChunk && chunkEndFn !== undefined) {
+			// callback called with args (index, length, percentDone)
+			chunkEndFn.call(context, index, array.length, parseInt((index / array.length) * 100, 10));
+		}
+		if (index < array.length) {
+			// set Timeout for async iteration
+			//setTimeout(doChunk, 1);
+			wait(1).then(f=>{doChunk();});
+		} else {
+			if (endFn !== undefined) {
+				endFn.call(context);
+			}
+			defer.resolve();
+		}
+	}
+	doChunk();
+
+	return defer.promise();
 };
 
 // skuid.custom.modelLoader(model[],fparams);
@@ -361,7 +624,7 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 //  Can take as a parameter a single model, or an array of models
 //	NOTE: Cannot use subquerying on aggregate models as we need to use OR
 //		to run more than one query and OR is not allowed along with subqueries in SOQL
-// 	Runs Asynchronously and works with $.when();
+// 	Runs Asynchronously and works with skuid.$.when();
 //	fparams: object
 //	{
 //		limit: Number of rows to limit by. If unspecified will choose
@@ -374,12 +637,14 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 //				nextStart: the row # of the next row to be queried,
 //				nextEnd: the last row # to be queried (based on limit)
 //				model: the current model being queried
+//				model.label: object name
+//				model.labelPlural: plural object name
 //			}
 //		exportWhenDone: true or false for whether or not to export when done loading, default false
 //		exportOptions: options object to pass to the export function for customized options
 //	}
 skuid.custom.modelLoader = function (model, fparams) {
-	const deferred = $.Deferred();
+	const deferred = skuid.$.Deferred();
 	if (model === undefined) {
 		deferred.reject('Model undefined');
 		return deferred.promise();
@@ -391,10 +656,14 @@ skuid.custom.modelLoader = function (model, fparams) {
 		if (model.length > 0) {
 			const m = model[0];
 			const limit = fparams.limit || undefined;
-			const localLimit = fparams.limit || m.recordsLimit || 200;
+			let localLimit = fparams.limit || m.recordsLimit || 200;
 			const exportWhenDone = fparams.exportWhenDone || false;
 			const exportOptions = fparams.exportOptions || {};
 			const progressCallback = fparams.progressCallback || undefined;
+			
+			if(localLimit === null || localLimit === undefined){
+				localLimit = 200;
+			}
 
 			// Set Initial Progress
 			if (progressCallback !== undefined) {
@@ -421,10 +690,14 @@ skuid.custom.modelLoader = function (model, fparams) {
 		}
 	} else {
 		const limit = fparams.limit || undefined;
-		const localLimit = fparams.limit || model.recordsLimit || 200;
+		let localLimit = fparams.limit || model.recordsLimit || 200;
 		const exportWhenDone = fparams.exportWhenDone || false;
 		const exportOptions = fparams.exportOptions || {};
 		const progressCallback = fparams.progressCallback || undefined;
+
+		if(localLimit === null || localLimit === undefined){
+			localLimit = 200;
+		}
 
 		// Set Initial Progress
 		if (progressCallback !== undefined) {
@@ -499,44 +772,80 @@ skuid.custom.modelLoader = function (model, fparams) {
 				let fieldBefore = '';
 				let fieldAfter = '';
 				const field = f.id;
+                
+                //Handle child relationship fields
+                if(f.type === 'childRelationship'){
+					let childFieldStr = '';
 
-				if (field === 'Id') {
-					noIdField = false;
-				}
-				
-				let fieldName = escapeSOQL(f.name) || '';
-				if (fieldName !== '') {
-					fieldName = ` ${fieldName}`;	
-				}
-				// remove name for non-aggregate models
-				if (model.isAggregate === false) {
-					fieldName = '';
-				}
+					//Rely on the debug string to get the SOQL of the child relationship query -- ?? is this reliable ??
+					if(f.debug !== undefined && f.debug !== null && f.debug !== ''){
+						childFieldStr = f.debug;
 
-				if (fieldsStr !== '') {
-					fieldsStr += ',';
-				}
-
-				// If this is a child relationship field
-				// if (f.type !== undefined && f.type === 'childRelationship') {
-				//
-				// }
-
-				if (f.function !== undefined) {
-					fieldBefore = `${f.function}(`;
-					fieldAfter = ')';
-				}
-
-				fieldsStr += `${fieldBefore}${field}${fieldAfter}${fieldName}`;
-
-				// if this is a group by field, add it to our groupby string and groupbyItemsArr
-				if (model.isAggregate === true && f.groupable === true && (f.function === undefined || f.function === null)) {
-					if (groupby !== '') {
-						groupby += ',';
+						//if childFieldStr ends with a ',' remove it
+						if(childFieldStr.endsWith(',')){
+							childFieldStr = childFieldStr.substring(0,childFieldStr.length-1);
+						}
 					}
-					groupby += field;
-					groupbyItemsArr.push(field);
+
+					if (fieldsStr !== '') {
+                        fieldsStr += ',';
+                    }
+					fieldsStr += `${childFieldStr}`;
+                }
+                //Handle standard fields
+                else{
+                    if (field === 'Id') {
+                        noIdField = false;
+                    }
+                    
+                    let fieldName = escapeSOQL(f.name) || '';
+                    if (fieldName !== '') {
+                        fieldName = ` ${fieldName}`;	
+                    }
+                    // remove name for non-aggregate models
+                    if (model.isAggregate === false) {
+                        fieldName = '';
+                    }
+    
+                    if (fieldsStr !== '') {
+                        fieldsStr += ',';
+                    }
+    
+                    // If this is a child relationship field
+                    // if (f.type !== undefined && f.type === 'childRelationship') {
+                    //
+                    // }
+    
+                    if (f.function !== undefined) {
+                        fieldBefore = `${f.function}(`;
+                        fieldAfter = ')';
+                    }
+    
+                    fieldsStr += `${fieldBefore}${field}${fieldAfter}${fieldName}`;
+    
+                    // if this is a group by field, add it to our groupby string and groupbyItemsArr
+                    //if (model.isAggregate === true && f.groupable === true && (f.function === undefined || f.function === null)) {
+                    //	if (groupby !== '') {
+                    //		groupby += ',';
+                    //	}
+                    //	groupby += field;
+                    //	groupbyItemsArr.push(field);
+                    //}
+                }
+			}
+		}
+
+		// construct group by from model's groupByFields
+		if (model.groupByFields !== undefined) {
+			for (let i = 0; i < model.groupByFields.length; i++) {
+				const f = model.groupByFields[i];
+				const field = f.id;
+
+				if (groupby !== '') {
+						groupby += ',';
 				}
+				groupby += field;
+				groupbyItemsArr.push(field);
 			}
 		}
 
@@ -624,7 +933,7 @@ skuid.custom.modelLoader = function (model, fparams) {
 					// Ignore attributes and non-grouped fields
 					// Make sure to get the field Id from the field Name
 					const aggFieldId = getAggFieldIdFromName(model, key);
-					if (key !== 'attributes' && aggFieldId !== undefined && groupbyItemsArr.includes(aggFieldId)) {
+					if (key !== 'attributes' && aggFieldId !== undefined && groupbyItemsArr.includes(aggFieldId) && (model.fieldsMap[aggFieldId].aggConditionOptimize === undefined || !model.fieldsMap[aggFieldId].aggConditionOptimize)) {
 						const obj = {};
 						obj[aggFieldId] = value;
 						lrcArr.push(obj);
@@ -659,14 +968,14 @@ skuid.custom.modelLoader = function (model, fparams) {
 
 					let first = true;
 					// loop through our last row group by fields
-					$.each(lrcArr, (i, row) => {
+					skuid.$.each(lrcArr, (i, row) => {
 						if (i === lrcArr.length - 1) {
 							// If we're at the last field, set greater than condition
 							// Loop through the fields
 							for (const [key, value] of Object.entries(row)) {
 								let enclose = false;
-								let ourValue = value;
-								if (displayTypesToEnclose.includes(model.fieldsMap[key].displaytype)) {
+								let ourValue = escapeSOQL(value);
+								if (displayTypesToEnclose.includes(model.fieldsMap[key].displaytype) || model.fieldsMap[key].encloseValueInQuotes) {
 									enclose = true;
 								}
 
@@ -703,9 +1012,9 @@ skuid.custom.modelLoader = function (model, fparams) {
 							// If we're not at the last field, set equal condition
 							for (const [key, value] of Object.entries(row)) {
 								let enclose = false;
-								let ourValue = value;
+								let ourValue = escapeSOQL(value);
 
-								if (displayTypesToEnclose.includes(model.fieldsMap[key].displaytype)) {
+								if (displayTypesToEnclose.includes(model.fieldsMap[key].displaytype) || model.fieldsMap[key].encloseValueInQuotes) {
 									enclose = true;
 								}
 
@@ -775,9 +1084,9 @@ skuid.custom.modelLoader = function (model, fparams) {
 			for (let i = 0; i < model.havings.length; i++) {
 				const h = model.havings[i];
 				const encloseValueInQuotes = h.encloseValueInQuotes;
-				const fieldfunction = h.fieldfunction || '';
+				const fieldFunction = h.fieldFunction || '';
 				const field = h.field;
-				const value = h.value;
+				const value = escapeSOQL(h.value);
 				const operator = skuid.custom.operatorSOQL(h.operator);
 				let fieldPre = '';
 				let fieldPost = '';
@@ -797,7 +1106,7 @@ skuid.custom.modelLoader = function (model, fparams) {
 					having += ' AND ';
 				}
 
-				if (fieldfunction !== '') {
+				if (fieldFunction !== '') {
 					fieldPre = '(';
 					fieldPost = ')';
 				}
@@ -807,7 +1116,7 @@ skuid.custom.modelLoader = function (model, fparams) {
 					valuePost = '\'';
 				}
 
-				having += `(${fieldfunction}${fieldPre}${field}${fieldPost} ${operator} ${valuePre}${value}${valuePost})`;
+				having += `(${fieldFunction}${fieldPre}${field}${fieldPost} ${operator} ${valuePre}${value}${valuePost})`;
 			}
 
 			if (having !== '') {
@@ -823,6 +1132,9 @@ skuid.custom.modelLoader = function (model, fparams) {
 		}
 
 		const queryStr = `SELECT ${fieldsStr} FROM ${model.objectName}${ourConditionStrPre}${ourConditionStr}${lastRowConditionsPre}${lastRowConditions}${groupbyPre}${groupby}${havingPre}${having}${orderby}${limitStr}`;
+
+		//console.log('modelLoader');
+		console.log(queryStr);
 
 		skuid.sfdc.api.query(queryStr).done(function (queryResult) {
 			// Records is an array of query results in the format {field: value, field2: value2}
@@ -877,17 +1189,24 @@ skuid.custom.modelLoader = function (model, fparams) {
 				// sort our tempRows based on original sorting parameters set in the model
 				tempRows = sortRows(tempRows, model);
 
+				// flag the model as finished querying all rows
+				model.canRetrieveMoreRows = false;
+
 				// adopt our tempRows into our model
 				model.adoptRows(tempRows);
 
 				if (exportWhenDone) {
-					skuid.$.when(model.exportData(exportOptions)).done((result) => {
+					skuid.skuid.$.when(model.exportData(exportOptions)).done((result) => {
 						if (nextQuery === 0) {
 							promiseResolve(result);
 						} else {
-							let localLimit = modelArray[nextQuery].recordsLimit || 200;
+							let localLimit = 200;
 
-							if (limitSpecified) {
+							if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].recordsLimit !== undefined && modelArray[nextQuery].recordsLimit !== null){
+								localLimit = modelArray[nextQuery].recordsLimit;
+							}
+
+							if (limitSpecified && limit !== null && limit !== undefined) {
 								localLimit = limit;
 							}
 
@@ -922,9 +1241,13 @@ skuid.custom.modelLoader = function (model, fparams) {
 					if (nextQuery === 0) {
 						promiseResolve();
 					} else {
-						let localLimit = modelArray[nextQuery].recordsLimit || 200;
+						let localLimit = 200;
 
-						if (limitSpecified) {
+						if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].recordsLimit !== undefined && modelArray[nextQuery].recordsLimit !== null){
+							localLimit = modelArray[nextQuery].recordsLimit;
+						}
+
+						if (limitSpecified && limit !== null && limit !== undefined) {
 							localLimit = limit;
 						}
 						// Set Initial Progress
@@ -1019,19 +1342,27 @@ skuid.custom.modelLoader = function (model, fparams) {
 							return undefined;
 						}
 						// otherwise skip this condition
-						
-							conditionsItems.push(undefined);
+						conditionsItems.push(undefined);
+						continue;
 					}
 					let mergeModelFirstRowValue = escapeSOQL(mergeModel.getFieldValue(mergeModelFirstRow, mergeField, true));
 					if (mergeModelFirstRowValue === undefined || mergeModelFirstRowValue === null) {
 						mergeModelFirstRowValue = 'NULL';
 					}
 					const mergeModelData = mergeModel.data;
-					const encloseValueInQuotes = c.encloseValueInQuotes;
+					let encloseValueInQuotes = c.encloseValueInQuotes;
 					let precede = '';
 					let valueBefore = '';
+					let valueBeforeOutside = '';
 					let valueAfter = '';
+					let valueAfterOutside = '';
 					let value = '';
+					let quoteStart = '';
+					let quoteEnd = '';
+
+					if (operator.includes('does not')) {
+						precede = 'NOT ';
+					}
 					
 					if (operator.includes('start')) {
 						operator = 'LIKE';
@@ -1045,17 +1376,18 @@ skuid.custom.modelLoader = function (model, fparams) {
 						valueAfter = '%';
 					}
 					
-					if (operator.includes('does not')) {
-						precede = 'NOT ';
-					}
+					
 
 					// if in or not in, we need to iterate over the other model and include / exclude all those values
 					if (operator === 'in' || operator === 'not in') {
-						valueBefore = '(';
-						valueAfter = ')';
+						valueBeforeOutside = '(';
+						valueAfterOutside = ')';
 						for (let j = 0; j < mergeModelData.length; j++) {
 							const mr = mergeModelData[j];
 							let mf = escapeSOQL(mergeModel.getFieldValue(mr, mergeField, true));
+
+							let singleQuoteStart='';
+							let singleQuoteEnd='';
 
 							if (mf === undefined || mf === null) {
 								mf = 'NULL';
@@ -1065,18 +1397,21 @@ skuid.custom.modelLoader = function (model, fparams) {
 								value += ',';
 							}
 
+							//REVISED: 2023-02-08
+							//Using singleQuoteStart / singleQuoteEnd on an individual item by item basis instead of overall for the whole collection
 							if (mf !== 'NULL' && encloseValueInQuotes) {
-								value += `'${mf}'`;
-							} else {
-								value += mf;
+								singleQuoteStart = '\'';
+								singleQuoteEnd = '\'';
 							}
+
+							value += singleQuoteStart+mf+singleQuoteEnd;
 						}
 					} else if (mergeModelFirstRow !== undefined && mergeModelFirstRow !== null) {
 						if (mergeModelFirstRowValue !== 'NULL' && encloseValueInQuotes) {
-							value = `'${mergeModelFirstRowValue}'`;
-						} else {
-							value = mergeModelFirstRowValue;
-						}
+							quoteStart = '\'';
+							quoteEnd = '\'';
+						} 
+						value = mergeModelFirstRowValue;
 					}
 
 					// LIKE NULL set operator to = instead
@@ -1087,8 +1422,9 @@ skuid.custom.modelLoader = function (model, fparams) {
 					if ((operator === 'in' || operator === 'not in') && value === '') {
 						value = 'NULL';
 					}
-					
-					conditionsItems.push(`(${precede}${thisField} ${operator} ${valueBefore}${value}${valueAfter})`);
+					//REVISED: 2023-02-08
+					//conditionsItems.push(`(${precede}${thisField} ${operator} ${valueBeforeOutside}${quoteStart}${valueBefore}${value}${valueAfter}${quoteEnd}${valueAfterOutside})`);
+					conditionsItems.push(`(${precede}${thisField} ${operator} ${valueBeforeOutside}${quoteStart}${valueBefore}${value}${valueAfter}${quoteEnd}${valueAfterOutside})`);
 				} else if (c.type === 'multiple') {
 					// multiple specified values
 					// Field in (
@@ -1116,8 +1452,8 @@ skuid.custom.modelLoader = function (model, fparams) {
 					thisItem += ')';
 
 					conditionsItems.push(thisItem);
-				} else if (c.type === 'join') {
-					// subquery
+				} else if (c.type === 'join' || c.type === 'group') {
+					// subquery or group (search box)
 					const field = c.field;
 					const subConditionLogic = c.subConditionLogic;
 					// const encloseValueInQuotes = c.encloseValueInQuotes;
@@ -1131,10 +1467,19 @@ skuid.custom.modelLoader = function (model, fparams) {
 					let subConditionsParsed;
 					let subConditionLogicParsed;
 
-					let thisItem = `(${field} ${operator} (SELECT ${joinField} FROM ${joinObject}`;
+					let thisItem='';
+					if(c.type === 'join'){
+						//This is a subquery
+						thisItem = `(${field} ${operator} (SELECT ${joinField} FROM ${joinObject}`;
+					}
 
 					if (subConditions !== undefined && subConditions.length > 0) {
-						thisItem += ' WHERE ';
+						if(c.type === 'join'){
+							thisItem += ' WHERE ';
+						}
+						else{
+							thisItem += '(';
+						}
 						
 						subConditionLogicParsed = parseConditionLogic(subConditions, subConditionLogic);
 						// Abort if undefined
@@ -1159,16 +1504,39 @@ skuid.custom.modelLoader = function (model, fparams) {
 							}
 						}
 					}
-					
-					thisItem += '))';
 
+					if(c.type === 'join'){
+						thisItem += '))';
+					}
+					else{
+						thisItem += ')';
+					}
+
+					//DEBUG
+					if(c.type === 'group'){
+						console.log('Search Logic:');
+						console.log(thisItem);
+					}
+					
 					conditionsItems.push(thisItem);
-				} else {
+				}
+				/*
+				else if(c.type === 'group'){
+					//search box generated condition
+
+					//NEEDS TO BE IMPLEMENTED
+				}
+				*/
+				else {
 					// standard fieldvalue, userinfo, datasourceuserinfo
 					let value = escapeSOQL(c.value);
 					let operator = skuid.custom.operatorSOQL(c.operator);
 					const noValueBehavior = c.noValueBehavior;
-
+					let encloseValueInQuotes = c.encloseValueInQuotes;
+					if(c.operator === 'contains'){
+						//Contains is always enclosed in quotes
+						c.encloseValueInQuotes = true;
+					}
 					if (noValueBehavior !== undefined && (value === undefined || value === '')) {
 						if (noValueBehavior === 'deactivate') {
 							conditionsItems.push(undefined);
@@ -1183,6 +1551,10 @@ skuid.custom.modelLoader = function (model, fparams) {
 					}
 
 					let precede = '';
+
+					if (operator.includes('does not')) {
+						precede = 'NOT ';
+					}
 					
 					if (operator.includes('start')) {
 						operator = 'LIKE';
@@ -1195,11 +1567,19 @@ skuid.custom.modelLoader = function (model, fparams) {
 						value = `%${value}%`;
 					}
 					
-					if (operator.includes('does not')) {
-						precede = 'NOT ';
+					//Handle includes operator
+					if(c.operator === 'includes' && c.values !== undefined && c.values.length > 0){
+						value = `(`;
+						for(let v of c.values){
+							v = escapeSOQL(v);
+							value += `'${v}',`;
+						}
+						//Remove trailing comma
+						value = value.substring(0,value.length-1);
+						value += ')';
 					}
 					
-					if (value !== 'NULL' && c.encloseValueInQuotes) {
+					if (value !== 'NULL' && encloseValueInQuotes) {
 						value = `'${value}'`;
 					}
 					
@@ -1271,11 +1651,21 @@ skuid.custom.modelLoader = function (model, fparams) {
 					const aField = skuid.utils.getObjectProperty(a, field);
 					const bField = skuid.utils.getObjectProperty(b, field);
 
-					if (nullsLast && aField === null && bField !== null) {
-						return 1;
+					if (aField === null && bField !== null) {
+						if(nullsLast){
+							return 1;
+						}
+						else{
+							return -1;
+						}
 					}
-					if (nullsLast && aField !== null && bField === null) {
-						return -1;
+					if (aField !== null && bField === null) {
+						if(nullsLast){
+							return -1;
+						}
+						else{
+							return 1;
+						}
 					}
 					
 					if (aField < bField) {
@@ -1309,6 +1699,10 @@ skuid.custom.modelLoader = function (model, fparams) {
 				return [];
 			}
 
+			//console.log(`PARSECONDITIONLOGIC:`);
+			//console.log(conditions);
+			//console.log(conditionLogic);
+
 			const hasOr = conditionLogic.match(/( OR )/gi);
 
 			// If there is an OR in the condition logic, surround with parenthesis
@@ -1320,14 +1714,29 @@ skuid.custom.modelLoader = function (model, fparams) {
 			
 			let match = conditionLogic.match(/([ ]*AND[ ]*)|([0-9]+)|([()])|([ ]*OR[ ]*)/gi);
 
+			//console.log('match:');
+			//console.log(match);
+
 			const ourConditions = parseConditionsSOQL(conditions);
 
 			// abort query if undefined
 			if (ourConditions === undefined) {
 				return undefined;
 			}
+
+			//Add spaces to AND / OR
+			for (let i = 0; i < match.length; i++) {
+				if (match[i] !== undefined && (match[i].toUpperCase() === 'AND' || match[i].toUpperCase() === 'AND ' || match[i].toUpperCase() === ' AND' || match[i].toUpperCase() === ' AND ')) {
+					match[i] = ' AND ';
+				} else if (match[i] !== undefined && (match[i].toUpperCase() === 'OR' || match[i].toUpperCase() === 'OR ' || match[i].toUpperCase() === ' OR' || match[i].toUpperCase() === ' OR ')) {
+					match[i] = ' OR ';
+				}
+			}
 			
 			match = deactivateLogic({ match, conditions, ourConditions });
+
+			//console.log('deactivateLogic match:');
+			//console.log(match);
 
 			for (let i = 0; i < match.length; i++) {
 				if (!isNaN(match[i])) {
@@ -1339,6 +1748,9 @@ skuid.custom.modelLoader = function (model, fparams) {
 					match[i] = ' OR ';
 				}
 			}
+
+			//console.log('fixedmatch:');
+			//console.log(match);
 			
 			// recursive function to deactivate logic
 			function deactivateLogic (fparams) {
@@ -1477,11 +1889,17 @@ skuid.custom.modelLoader = function (model, fparams) {
 //				limit: our limit for how many rows to save per run
 //				nextStart: the row # of the next row to be saved
 //				nextEnd: the last row # to be saved (based on limit)
+//				percentDone: the percent done of the save
+//				totalSaving: the total number of items saving
 //				model: the model currently being saved
+//				model.label: object name
+//				model.labelPlural: plural object name
 //			}
+//		debug: if true, open debugger
 //	}
 skuid.custom.modelSaver = function (model, fparams) {
-	const deferred = $.Deferred();
+	
+	const deferred = skuid.$.Deferred();
 	if (model === undefined) {
 		deferred.reject('Model undefined');
 		return deferred.promise();
@@ -1489,23 +1907,42 @@ skuid.custom.modelSaver = function (model, fparams) {
 
 	fparams = fparams || {};
 
+	let debug = false;
+	if(fparams.debug === true){
+		debugger;
+		debug = true;
+	}
+
 	if (Array.isArray(model)) {
 		if (model.length > 0) {
 			const m = model[0];
 
-			const localLimit = fparams.limit || m.recordsLimit || 100;
+			let localLimit = fparams.limit || m.recordsLimit || 100;
 			const limit = fparams.limit || undefined;
 			const progressCallback = fparams.progressCallback || undefined;
+			let changesLength = 0;
+			if(m.changes !== undefined){
+				changesLength = Object.keys(m.changes).length;
+			}
+
+			if(localLimit === null){
+				localLimit = 100;
+			}
 
 			// Set Initial Progress
 			if (progressCallback !== undefined) {
+				let pcNextEnd = localLimit;
+				if(m.changes !== undefined && changesLength !== undefined && changesLength < localLimit){
+					pcNextEnd = changesLength;
+				}
 				progressCallback.call(this, {
 					count: 0,
 					limit: localLimit,
 					nextStart: 1,
-					nextEnd: localLimit,
+					nextEnd: pcNextEnd,
 					model: m,
-					percentDone: 0
+					percentDone: 0,
+					totalSaving: changesLength
 				});
 			}
 
@@ -1521,23 +1958,39 @@ skuid.custom.modelSaver = function (model, fparams) {
 				promiseResolve: deferred.resolve,
 				promiseReject: deferred.reject,
 				modelArray: model,
-				modelArrayPosition: 0
+				modelArrayPosition: 0,
+				changesLength: changesLength,
+				debug: debug
 			});
 		}
-	} else {
+	} else if(model !== undefined) {
+		const m = model;
 		const limit = fparams.limit || undefined;
-		const localLimit = fparams.limit || model.recordsLimit || 100;
+		let localLimit = fparams.limit || model.recordsLimit || 100;
 		const progressCallback = fparams.progressCallback || undefined;
+		let changesLength = 0;
+		if(m.changes !== undefined){
+			changesLength = Object.keys(m.changes).length;
+		}
+
+		if(localLimit === null){
+			localLimit = 100;
+		}
 
 		// Set Initial Progress
 		if (progressCallback !== undefined) {
+			let pcNextEnd = localLimit;
+			if(m.changes !== undefined && changesLength !== undefined && changesLength < localLimit){
+				pcNextEnd = changesLength;
+			}
 			progressCallback.call(this, {
 				count: 0,
 				limit: localLimit,
 				nextStart: 1,
-				nextEnd: localLimit,
+				nextEnd: pcNextEnd,
 				model: model,
-				percentDone: 0
+				percentDone: 0,
+				totalSaving: changesLength
 			});
 		}
 
@@ -1551,7 +2004,9 @@ skuid.custom.modelSaver = function (model, fparams) {
 			limit: limit,
 			progressCallback: progressCallback,
 			promiseResolve: deferred.resolve,
-			promiseReject: deferred.reject
+			promiseReject: deferred.reject,
+			changesLength: changesLength,
+			debug: debug
 		});
 	}
 
@@ -1564,6 +2019,8 @@ skuid.custom.modelSaver = function (model, fparams) {
 		const promiseReject = fparams.promiseReject || undefined;
 		const modelArray = fparams.modelArray || undefined;
 		const modelArrayPosition = fparams.modelArrayPosition || 0;
+		const debug = fparams.debug;
+		let changesLength = fparams.changesLength || 0;
 		let limitSpecified = fparams.limitSpecified;
 
 		if (limitSpecified === undefined) {
@@ -1593,7 +2050,48 @@ skuid.custom.modelSaver = function (model, fparams) {
 
 		// Save the model
 		if (Object.keys(model.changes).length > 0) {
-			$.when(model.save()).done(f => {
+			skuid.$.when(skuid.model.save([model])).then(f => {
+				console.log('Save:');
+				console.log(f);
+
+				//If there was failure, reject
+				if(!f?.totalsuccess){
+					if (model === undefined || model.changesTemp === undefined || Object.keys(model.changesTemp).length === 0) {
+						if(model===undefined){
+							model = {};
+						}
+						model.hasChanged = false;
+					}
+					// Save failed, reject
+					if(model !== undefined && model.changesTemp !== undefined){
+						for (const [key, value] of Object.entries(model.changesTemp)) {
+							// Move from our temp changes back to changes
+							model.changes[key] = value;
+							// Make sure the model is set to hasChanged
+							model.hasChanged = true;
+							// Delete our temp key
+							delete model.changesTemp[key];
+						}
+						delete model.changesTemp;
+					}
+
+					
+					if(f.messages !== undefined && f.messages.length > 0){
+						for(let m of f.messages){
+							if(m.message !== undefined){
+								console.error('Save Error: ', m.message);
+							}
+							else{
+								console.error('Save Error: ', m);
+							}
+						}
+					}
+					promiseReject(f);
+				}
+
+				if(debug){
+					debugger;
+				}
 				if (Object.keys(model.changesTemp).length > 0) {
 					// If we still have changesTemp
 					if (progressCallback !== undefined) {
@@ -1608,7 +2106,8 @@ skuid.custom.modelSaver = function (model, fparams) {
 							nextStart: count + localCount + 1,
 							nextEnd: count + localCount + localEnd,
 							model: model,
-							percentDone: parseInt(((count + localCount) / model.data.length) * 100, 10)
+							percentDone: parseInt(((count + localCount) / changesLength) * 100, 10),
+							totalSaving: changesLength
 						});
 					}
 
@@ -1621,7 +2120,9 @@ skuid.custom.modelSaver = function (model, fparams) {
 						promiseReject: promiseReject,
 						modelArray: modelArray,
 						modelArrayPosition: modelArrayPosition,
-						limitSpecified: limitSpecified
+						limitSpecified: limitSpecified,
+						changesLength: changesLength,
+						debug: debug
 					});
 				} else {
 					// We have no remaining changesTemp, resolve
@@ -1630,26 +2131,40 @@ skuid.custom.modelSaver = function (model, fparams) {
 
 					let nextQuery = 0;
 					// If we have a next model to query, next query will be > 0, otherwisw will be 0
-					if (modelArray !== undefined && (modelArrayPosition + 1) < modelArray.length) {
+					if (modelArray !== undefined && modelArrayPosition !== undefined && (modelArrayPosition + 1) < modelArray.length) {
 						nextQuery = (modelArrayPosition + 1);
 					}
 					
 					if (nextQuery === 0) {
 						promiseResolve();
 					} else {
-						let localLimit = modelArray[nextQuery].recordsLimit || 100;
+						let localLimit = 100;
+						let nextChangesLength = 0;
+						if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].changes !== undefined){
+							nextChangesLength = Object.keys(modelArray[nextQuery].changes).length;
+						}
+
+						if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].recordsLimit !== undefined){
+							localLimit = modelArray[nextQuery].recordsLimit;
+						}
+
 						if (limitSpecified) {
 							localLimit = limit;
 						}
 						// Set Initial Progress
 						if (progressCallback !== undefined) {
+							let pcNextEnd = localLimit;
+							if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].changes !== undefined && nextChangesLength !== undefined && nextChangesLength < localLimit){
+								pcNextEnd = nextChangesLength;
+							}
 							progressCallback.call(this, {
 								count: 0,
 								limit,
 								nextStart: 1,
-								nextEnd: localLimit,
+								nextEnd: pcNextEnd,
 								model: modelArray[nextQuery],
-								percentDone: 0
+								percentDone: 0,
+								totalSaving: nextChangesLength
 							});
 						}
 
@@ -1666,24 +2181,31 @@ skuid.custom.modelSaver = function (model, fparams) {
 							promiseReject: promiseReject,
 							modelArray: modelArray,
 							modelArrayPosition: nextQuery,
-							limitSpecified: limitSpecified
+							limitSpecified: limitSpecified,
+							changesLength: nextChangesLength,
+							debug: debug
 						});
 					}
 				}
 			}).fail(f => {
-				if (Object.keys(model.changesTemp).length === 0) {
+				if (model === undefined || model.changesTemp === undefined || Object.keys(model.changesTemp).length === 0) {
+					if(model===undefined){
+						model = {};
+					}
 					model.hasChanged = false;
 				}
 				// Save failed, reject
-				for (const [key, value] of Object.entries(model.changesTemp)) {
-					// Move from our temp changes back to changes
-					model.changes[key] = value;
-					// Make sure the model is set to hasChanged
-					model.hasChanged = true;
-					// Delete our temp key
-					delete model.changesTemp[key];
+				if(model !== undefined && model.changesTemp !== undefined){
+					for (const [key, value] of Object.entries(model.changesTemp)) {
+						// Move from our temp changes back to changes
+						model.changes[key] = value;
+						// Make sure the model is set to hasChanged
+						model.hasChanged = true;
+						// Delete our temp key
+						delete model.changesTemp[key];
+					}
+					delete model.changesTemp;
 				}
-				delete model.changesTemp;
 				
 				promiseReject(f);
 			});
@@ -1694,27 +2216,39 @@ skuid.custom.modelSaver = function (model, fparams) {
 			
 			let nextQuery = 0;
 			// If we have a next model to query, next query will be > 0, otherwisw will be 0
-			if (modelArray !== undefined && (modelArrayPosition + 1) < modelArray.length) {
+			if (modelArray !== undefined && modelArrayPosition !== undefined && (modelArrayPosition + 1) < modelArray.length) {
 				nextQuery = (modelArrayPosition + 1);
 			}
 			
 			if (nextQuery === 0) {
 				promiseResolve();
 			} else {
-				let localLimit = modelArray[nextQuery].recordsLimit || 100;
+				let localLimit = 100;
+				if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].recordsLimit !== undefined){
+					localLimit = modelArray[nextQuery].recordsLimit;
+				}
 				if (limitSpecified) {
 					localLimit = limit;
+				}
+				let nextChangesLength = 0;
+				if(modelArray !== undefined && nextQuery !== undefined && modelArray[nextQuery] !== undefined && modelArray[nextQuery].changes !== undefined){
+					nextChangesLength = Object.keys(modelArray[nextQuery].changes).length;
 				}
 
 				// Set Initial Progress
 				if (progressCallback !== undefined) {
+					let pcLocalLimit = localLimit;
+					if(nextChangesLength !== undefined && nextChangesLength < pcLocalLimit){
+						pcLocalLimit = nextChangesLength;
+					}
 					progressCallback.call(this, {
 						count: 0,
 						limit,
 						nextStart: 1,
-						nextEnd: localLimit,
+						nextEnd: pcLocalLimit,
 						model: modelArray[nextQuery],
-						percentDone: 0
+						percentDone: 0,
+						totalSaving: nextChangesLength
 					});
 				}
 
@@ -1731,7 +2265,9 @@ skuid.custom.modelSaver = function (model, fparams) {
 					promiseReject: promiseReject,
 					modelArray: modelArray,
 					modelArrayPosition: nextQuery,
-					limitSpecified: limitSpecified
+					limitSpecified: limitSpecified,
+					changesLength: nextChangesLength,
+					debug: debug
 				});
 			}
 		}
@@ -1739,3 +2275,341 @@ skuid.custom.modelSaver = function (model, fparams) {
 
 	return deferred.promise();
 };
+
+// skuid.custom.sheetJSFromTable(c)
+// takes a table component or a table component's ID
+// returns array of arrays to use for XLSX.utils.aoa_to_sheet
+// table MUST have "Show Export Button" selected
+// can add the CSS class "hideExport" to the table to force hide the export button
+// c: table's component or component's ID
+// options: 
+// {
+//		showHidden: true //defaults to true
+// }
+skuid.custom.sheetJSFromTable = function(c, options){
+	if(c === undefined){
+		return undefined;
+	}
+	
+	//If c is a string it is the component id, get the component from the component id
+	if(typeof c === 'string'){
+		c = skuid.$C(c);
+	}
+
+	if(c===undefined || c.element===undefined || c.element.fieldsMetadataForExport===undefined || c.element.model===undefined){
+		return undefined;
+	}
+
+	//Get table settings to determine if columns are set as userHidden
+	let set = c._personalizationService.getSettings();
+	if (!set.columnSettingsByUID) {
+		set.columnSettingsByUID = c.element._columnSettingsByUID;
+	}
+	function getKey(object,value) {
+	    return Object.keys(object).find(key => object[key]['fieldId'] === value);
+	}
+
+	let showHidden = true;
+	if(options !== undefined && options.showHidden !== undefined){
+		showHidden = options.showHidden;
+	}
+
+	let sheetJSDataOptions = {fields: []};
+
+	let meta = c.element.fieldsMetadataForExport;
+	let model = c.element.model;
+
+	for(let o of meta){
+		if(o.type === 'childRelationship'){
+			//Handle child relationship column
+		}
+		else if(o.id === undefined && o.template !== undefined){
+			//Handle template field
+		}
+		else if(o.id === undefined){
+			//Handle Button or Image field (do nothing)
+		}
+		else{
+			//Handle standard model field
+			if(showHidden){
+				sheetJSDataOptions.fields.push({id: o.id, name: o.label});
+			}
+			else{
+				if(!set.columnSettingsByUID[getKey(set.columnSettingsByUID,o.id)]?.userHidden){
+					sheetJSDataOptions.fields.push({id: o.id, name: o.label});
+				}
+			}
+		}
+	}
+
+	return skuid.custom.sheetJSData(model.data,sheetJSDataOptions);
+}
+
+// skuid.custom.sheetJSData(d, options)
+// takes model.data and options object
+// returns array of arrays to use for XLSX.utils.aoa_to_sheet
+// d: model.data array
+// options:
+// {
+//		//fields to include in export
+//		fields: [
+//			{id: 'FIELDID', name: 'RENAMEFIELDCOLUMNHEADERTOTHIS'}
+//		]
+//		includeId: false //defaults to false
+// }
+skuid.custom.sheetJSData = function (d, options) {
+	if(d===undefined || d.length === 0){
+		return undefined;
+	}
+
+	let retArr = [];
+	let usingFields = false;
+	if(options !== undefined && options.fields !== undefined){
+		usingFields=true;
+	}
+	let fieldsToSkip = {};
+	fieldsToSkip['__skuid_record__'] = true;
+	fieldsToSkip['Id'] = true;
+	if(options !== undefined && options.includeId === true){
+		fieldsToSkip['Id'] = false;
+	}
+
+	//construct first row
+	let firstRow = [];
+
+	function pushSubObj(row,obj,preObjStr){
+		if(preObjStr === undefined){
+			preObjStr = '';
+		}
+
+		if(typeof obj !== 'object'){
+			if(fieldsToSkip[obj] === false){
+				row.push(obj);
+			}
+			return row;
+		}
+
+		for (const [key, value] of Object.entries(obj)) {
+			if(fieldsToSkip[preObjStr+'.'+key] === true || fieldsToSkip[key] === true){
+				continue;
+			}
+			else if(typeof value === 'object' && value !== null){
+				row = pushSubObj(row,value,preObjStr+'.'+key);
+			}
+			else{
+				row.push(value);
+			}
+		}
+		return row;
+	}
+
+	if(!usingFields){
+		for (const [key, value] of Object.entries(d[0])) {
+			if(fieldsToSkip[key] === true){
+				continue;
+			}
+
+			firstRow = pushSubObj(firstRow,key);
+		}
+	}
+	else{
+		for (let i=0; i < options.fields.length; i++){
+			let field = options.fields[i];
+			let fieldName = field.id;
+			if(field.name !== undefined){
+				fieldName = field.name;
+			}
+			firstRow.push(fieldName);
+		}
+	}
+	retArr.push(firstRow);
+
+	for(let i=0; i < d.length; i++){
+		let o = d[i];
+		let thisRow = [];
+
+		if(!usingFields){
+			for (const [key, value] of Object.entries(o)) {
+				if(fieldsToSkip[key] === true){
+					continue;
+				}
+				thisRow = pushSubObj(thisRow,value,key);
+			}
+		}
+		else{
+			for (let j=0; j < options.fields.length; j++){
+				let fieldId = options.fields[j].id;
+				thisRow.push(Object.byString(o,fieldId));
+			}
+		}
+		retArr.push(thisRow);
+	}
+
+	return retArr;
+};
+
+// skuid.custom.setHidden(f)
+// takes an object consisting of table and properties and sets item in the table to display or not display based on properties
+// options:
+// {
+//		table: table component to update (optional, use either this or tableId)
+//		tableId: id of table component to update (optional, use either this or table)
+//		key: the key to use to match table column, can either use the column's label, or fieldId
+//		by: "label" or "fieldId" depending on how you want to select the column; defaults to "label"
+//		value: true to hide, false to unhide; defaults to true
+//		wrapper: optional wrapper to re-render in order to refresh the display so the changes are visible - NOTE: if making more than 1 change at a time do not use this as it will force several re-renders and can slow/freeze the UI
+// }
+skuid.custom.setHidden = function (f){
+	function getKeyBy(object,by,value) {
+	    return Object.keys(object).find(key => object[key][by] === value);
+	}
+	let table = f.table;
+	if(table===undefined){
+		table = skuid.component.getById(f.tableId);
+	}
+	let key = f.key;
+	let set = table._personalizationService.getSettings();
+	if (!set.columnSettingsByUID) {
+		set.columnSettingsByUID = table.element._columnSettingsByUID;
+	}
+	let value = f.value;
+	if(f.value === undefined){
+		value = true;
+	}
+	let by = f.by;
+	if(f.by === undefined){
+		by = 'label';
+	}
+
+	set.columnSettingsByUID[getKeyBy(set.columnSettingsByUID,by,key)].userHidden = value;
+	table._personalizationService.updateSettings(set);
+
+	if(f.wrapper !== undefined){
+		f.wrapper.render();
+	}
+}
+
+skuid.custom.reRenderModelComponents = function(model){
+	if(model === undefined || model.id === undefined){
+		return;
+	}
+
+	let allComponents = skuid.component.getAll();
+
+	for(let c of allComponents){
+		if(c.isRendered !== true){
+			continue;
+		}
+
+		let m;
+		if(c.getModel !== undefined){
+			m = c.getModel();
+		} 
+		if(m===undefined || m===null || m.id === undefined || m.id !== model.id){
+			
+		}
+
+		if(c.element === undefined || c.element.model === undefined || c.element.model.id === undefined || c.element.model.id !== model.id){
+			continue;
+		}
+
+		c.rerender();
+	}
+}
+
+skuid.custom.isFieldUIOnly = function(model,fieldKey){
+	if(model === undefined){
+		return false;
+	}
+	if(fieldKey === undefined){
+		return false;
+	}
+	if(model.fieldsMap === undefined){
+		return false;
+	}
+	if(model.fieldsMap[fieldKey] === undefined){
+		return false;
+	}
+	if(model.fieldsMap[fieldKey].uiOnly === true){
+		return true;
+	}
+
+	return false;
+}
+
+skuid.custom.removeUIOnlyChanges = function(model){
+	let changed = false;
+	if(model === undefined){
+		return;
+	}
+	if(model.changes === undefined){
+		return;
+	}
+	if(typeof model.changes !== 'object' || model.changes === null){
+		return;
+	}
+	for(const [key, value] of Object.entries(model.changes)) {
+		if(typeof value !== 'object' || value === null){
+			continue;
+		}
+		for(const [key2, value2] of Object.entries(value)) {
+			if(skuid.custom.isFieldUIOnly(model,key2)){
+				delete value[key2];
+				changed = true;
+			}
+		}
+		if(Object.entries(value).length === 0){
+			delete model.changes[key];
+		}
+	}
+	if(Object.entries(model.changes).length === 0){
+		model.hasChanged = false;
+	}
+
+	if(changed){
+		skuid.custom.reRenderModelComponents(model);
+	}
+}
+
+// Get any condition by name, including subconditions (provided condition names are unique within the model)
+// Operates like model.getConditionByName, but also searches subconditions
+skuid.custom.getConditionByName = function(model,conditionName){
+	if(model === undefined){
+		return false;
+	}
+	if(conditionName === undefined || conditionName === null || conditionName === ''){
+		return false;
+	}
+	if(model.conditions === undefined || model.conditions === null || !Array.isArray(model.conditions)){
+		return false;
+	}
+
+	for(const condition of model.conditions) {
+		if(condition.name === conditionName){
+			return condition;
+		}
+		if(condition.subConditions !== undefined){
+			for(const subCondition of condition.subConditions) {
+				if(subCondition.name === conditionName){
+					return subCondition;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+//Escape string for use in a template with `` (backticks)
+skuid.custom.escapeStringForTemplate = function(str) {
+	return str.replace(/[\\`$]/g, '\\$&').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+}
+
+skuid.custom.overrideModelLoad = function(model){
+	if(model === undefined){
+		return;
+	}
+	
+	model.load = function(){
+		return skuid.custom.modelLoader(model);
+	}
+}
