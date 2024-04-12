@@ -108,7 +108,7 @@ skuid.custom.isValidSFDate = function (dateString) {
 	var dNum = d.getTime();
 	if (!dNum && dNum !== 0) return false; // NaN value, Invalid date
 	return d.toISOString().slice(0, 10) === dateString;
-  }
+};
 
 // skuid.custom.fixCurrency(number)
 // remove anything past 2 digits after the decimal point for a number
@@ -346,6 +346,10 @@ skuid.custom.createUpdateExistingRows = function (model, rows) {
 	return retRows;
 }
 
+// Object.byString(o,s)
+//  o: an object
+//  s: string for accessing sub-objects
+//  Access sub-objects using a single string. eg. "MainObject.SubObject.SubSubObject.Field"
 Object.byString = function(o, s) {
 	if(o===null || o===undefined){
 		return o;
@@ -408,6 +412,13 @@ skuid.custom.iterateAsync = function(data,fn,chunkEndFn,maxTimePerChunk,context)
 	}
 	else if(data instanceof Map){
 		skuid.custom.iterateMapAsync(data,fn,chunkEndFn,
+		function(){
+			//runs after completing the loop, this is optional, use undefined if not using this
+			defer.resolve();
+		},maxTimePerChunk,context);
+	}
+	else if(typeof data === 'object' && data !== null){
+		skuid.custom.iterateObjAsync(data,fn,chunkEndFn,
 		function(){
 			//runs after completing the loop, this is optional, use undefined if not using this
 			defer.resolve();
@@ -552,8 +563,8 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 	return defer.promise();
 };
 
-// skuid.custom.iterateMapAsync(map, fn, chunkEndFn, endFn, maxTimePerChunk, context)
-//	Iterate a map asynchronously
+// skuid.custom.iterateObjAsync(obj, fn, chunkEndFn, endFn, maxTimePerChunk, context)
+//	Iterate an object asynchronously
 //	fn = the function to call while iterating over the map (for loop function call)
 //	chunkEndFn (optional, use undefined if not using) = the function to call when the chunk ends,
 //	used to update a loading message
@@ -561,7 +572,7 @@ skuid.custom.iterateMapAsync = function (map, fn, chunkEndFn, endFn, maxTimePerC
 //	last two args are optional
 /*
 //Usage
-skuid.custom.iterateMapAsync(ourMap,function(value, key, map){
+skuid.custom.iterateObjAsync(ourObj,function(value, key, map){
 	//runs each iteration of the loop
 },
 function(index,length,percentDone){
@@ -2276,7 +2287,7 @@ skuid.custom.modelSaver = function (model, fparams) {
 	return deferred.promise();
 };
 
-// skuid.custom.sheetJSFromTable(c)
+// skuid.custom.sheetJSFromTable(c, options)
 // takes a table component or a table component's ID
 // returns array of arrays to use for XLSX.utils.aoa_to_sheet
 // table MUST have "Show Export Button" selected
@@ -2489,6 +2500,9 @@ skuid.custom.setHidden = function (f){
 	}
 }
 
+// skuid.custom.reRenderModelComponents(model)
+// Rerenders all components that are tied to the model
+// model: the model to reRender components for
 skuid.custom.reRenderModelComponents = function(model){
 	if(model === undefined || model.id === undefined){
 		return;
@@ -2517,6 +2531,10 @@ skuid.custom.reRenderModelComponents = function(model){
 	}
 }
 
+// skuid.custom.isFieldUIOnly(model,fieldKey)
+// Returns true if the field is a UI Only field
+// model: the model to check
+// fieldKey: the field to check
 skuid.custom.isFieldUIOnly = function(model,fieldKey){
 	if(model === undefined){
 		return false;
@@ -2537,6 +2555,9 @@ skuid.custom.isFieldUIOnly = function(model,fieldKey){
 	return false;
 }
 
+// skuid.custom.removeUIOnlyChanges(model)
+// Removes any UI Only changes from the model, affecting the display of components
+// model: the model to remove UI Only changes from
 skuid.custom.removeUIOnlyChanges = function(model){
 	let changed = false;
 	if(model === undefined){
@@ -2571,8 +2592,12 @@ skuid.custom.removeUIOnlyChanges = function(model){
 	}
 }
 
+// skuid.custom.getConditionByName(model,conditionName)
 // Get any condition by name, including subconditions (provided condition names are unique within the model)
 // Operates like model.getConditionByName, but also searches subconditions
+// Returns the condition object if found, otherwise returns false
+// model: the model to search
+// conditionName: the name of the condition to search for
 skuid.custom.getConditionByName = function(model,conditionName){
 	if(model === undefined){
 		return false;
@@ -2599,11 +2624,16 @@ skuid.custom.getConditionByName = function(model,conditionName){
 	return false;
 }
 
+//skuid.custom.escapeStringForTemplate(str)
 //Escape string for use in a template with `` (backticks)
+//str: the string to escape
 skuid.custom.escapeStringForTemplate = function(str) {
 	return str.replace(/[\\`$]/g, '\\$&').replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
 }
 
+//skuid.custom.overrideModelLoad(model)
+//Override model.load function to use custom modelLoader
+//model: the model to override load function for
 skuid.custom.overrideModelLoad = function(model){
 	if(model === undefined){
 		return;
