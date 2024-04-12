@@ -64,7 +64,7 @@ Returns the passed str stripped of any special characters (eg. $1,000.01 -> 1000
 ### skuid.custom.formatPercentDone(percentDone)
 * percentDone: a percentage value from 0-100
 
-Returns the percentage rounded to the nearest 5%. This is for use to create a picklist based progress indicator that scales in increments of 5 from 0-100.
+Returns the percentage rounded to the nearest 5%. This is used along with creating a picklist based progress indicator that scales in increments of 5 from 0-100.
 
 ### skuid.custom.clearArray(array)
 * array: an array
