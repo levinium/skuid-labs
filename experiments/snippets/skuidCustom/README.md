@@ -309,11 +309,11 @@ This currently does not work with template fields. As a workaround, create your 
 ### skuid.custom.sheetJSData(d, options)
 * d: model.data array
 * options: {
-*  	//fields to include in export
-* 	fields: [
-* 		{id: 'FIELDID', name: 'RENAMEFIELDCOLUMNHEADERTOTHIS'}
-* 	]
-* 	includeId: false //defaults to false
+*  //fields to include in export
+*  fields: [
+* 	{id: 'FIELDID', name: 'RENAMEFIELDCOLUMNHEADERTOTHIS'}
+*  ]
+*  includeId: false //defaults to false
 * }
 
 Takes model.data and options object and returns an array of arrays to use for the XLSX.utils.aoa_to_sheet function in the SheetJS library. This is for exporting model data directly to an Excel file using SheetJS.
